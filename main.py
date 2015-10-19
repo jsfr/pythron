@@ -1,15 +1,9 @@
 import sys
 import sdl2
 import sdl2.ext
+import sdl2.keyboard
 import random
 from enum import Enum
-
-BG = sdl2.ext.Color(0, 0, 0)
-GRID_SIZE = 5
-ROWS = 120
-COLUMNS = 40
-BOARD_SIZE = GRID_SIZE*COLUMNS, GRID_SIZE*ROWS
-DELAY = 10
 
 
 class SoftwareRenderer(sdl2.ext.SoftwareSpriteRenderSystem):
@@ -23,43 +17,49 @@ class SoftwareRenderer(sdl2.ext.SoftwareSpriteRenderSystem):
 
 
 class MovementSystem(sdl2.ext.Applicator):
-    def __init__(self, minx, miny, maxx, maxy):
+    def __init__(self, gridsize):
         super(MovementSystem, self).__init__()
         self.componenttypes = Direction, sdl2.ext.Sprite
-        self.minx = minx
-        self.miny = miny
-        self.maxx = maxx
-        self.maxy = maxy
+        self.gridsize = gridsize
 
     def process(self, world, componentsets):
         for direction, sprite in componentsets:
-            swidth, sheight = sprite.size
-
             if direction == Direction.up:
-                sprite.y -= GRID_SIZE
+                sprite.y -= self.gridsize
             elif direction == Direction.down:
-                sprite.y += GRID_SIZE
+                sprite.y += self.gridsize
             elif direction == Direction.left:
-                sprite.x -= GRID_SIZE
+                sprite.x -= self.gridsize
             elif direction == Direction.right:
-                sprite.x += GRID_SIZE
+                sprite.x += self.gridsize
 
-            sprite.x = max(self.minx, sprite.x)
-            sprite.y = max(self.miny, sprite.y)
+# class BoardSystem(sdl2.ext.Applicator):
+#     def __init__(self):
+#         super(BoardSystem, self).__init__()
 
-            pmaxx = sprite.x + swidth
-            pmaxy = sprite.y + sheight
-            if pmaxx > self.maxx:
-                sprite.x = self.maxx - swidth
-            if pmaxy > self.maxy:
-                sprite.y = self.maxy - sheight
+
+# class Board():
+#     def __init__(self, rows, columns):
+#         self.grid = [[False for i in range(0, columns)]
+#                      for i in range(0, rows)]
 
 
 class Player(sdl2.ext.Entity):
-    def __init__(self, world, sprite, posx=0, posy=0):
+    def __init__(self, world, sprite, controls, posx=0, posy=0):
         self.sprite = sprite
         self.sprite.position = posx, posy
         self.direction = Direction.none
+        self.controls = Controls(
+            controls[0], controls[1], controls[2], controls[3])
+
+
+class Controls(object):
+    def __init__(self, up, down, left, right):
+        super(Controls, self).__init__()
+        self.up = sdl2.keyboard.SDL_GetKeyFromName(up)
+        self.down = sdl2.keyboard.SDL_GetKeyFromName(down)
+        self.left = sdl2.keyboard.SDL_GetKeyFromName(left)
+        self.right = sdl2.keyboard.SDL_GetKeyFromName(right)
 
 
 class Direction(Enum):
@@ -70,14 +70,38 @@ class Direction(Enum):
     right = 4
 
 
+def handle_events(players):
+        events = sdl2.ext.get_events()
+        for event in events:
+            if event.type == sdl2.SDL_KEYDOWN:
+                for player in players:
+                    if event.key.keysym.sym == player.controls.up:
+                        player.direction = Direction.up
+                    elif event.key.keysym.sym == player.controls.down:
+                        player.direction = Direction.down
+                    elif event.key.keysym.sym == player.controls.left:
+                        player.direction = Direction.left
+                    elif event.key.keysym.sym == player.controls.right:
+                        player.direction = Direction.right
+            elif event.type == sdl2.SDL_QUIT:
+                return False
+        return True
+
+
 def run():
+    BG = sdl2.ext.Color(0, 0, 0)
+    GRID_SIZE = 7
+    ROWS = 120
+    COLUMNS = 120
+    BOARD_SIZE = GRID_SIZE*COLUMNS, GRID_SIZE*ROWS
+    DELAY = 10
+
     sdl2.ext.init()
     window = sdl2.ext.Window(title="pythron", size=BOARD_SIZE)
     window.show()
 
     world = sdl2.ext.World()
-
-    movement = MovementSystem(0, 0, BOARD_SIZE[0], BOARD_SIZE[1])
+    movement = MovementSystem(GRID_SIZE)
     spriterenderer = SoftwareRenderer(window, BG)
 
     world.add_system(movement)
@@ -91,26 +115,16 @@ def run():
             random.randint(10, 250)),
         size=(GRID_SIZE, GRID_SIZE))
 
-    player = Player(world, sprite, 0, 0)
+    players = [
+        Player(world, sprite, [b'up', b'down', b'left', b'right'], 0, 0)
+    ]
 
     running = True
     while running:
-        events = sdl2.ext.get_events()
-        for event in events:
-            if event.type == sdl2.SDL_KEYDOWN:
-                if event.key.keysym.sym == sdl2.SDLK_UP:
-                    player.direction = Direction.up
-                elif event.key.keysym.sym == sdl2.SDLK_DOWN:
-                    player.direction = Direction.down
-                elif event.key.keysym.sym == sdl2.SDLK_LEFT:
-                    player.direction = Direction.left
-                elif event.key.keysym.sym == sdl2.SDLK_RIGHT:
-                    player.direction = Direction.right
-            if event.type == sdl2.SDL_QUIT:
-                running = False
-                break
+        running = handle_events(players)
         sdl2.SDL_Delay(DELAY)
         world.process()
+
 
 if __name__ == "__main__":
     sys.exit(run())
