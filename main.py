@@ -13,8 +13,23 @@ class SoftwareRenderer(sdl2.ext.SoftwareSpriteRenderSystem):
         sdl2.ext.fill(self.surface, self.color)
 
     def render(self, components):
-
         super(SoftwareRenderer, self).render(components)
+
+class StateSystem(sdl2.ext.Applicator):
+    def __init__(self, players):
+        super(StateSystem, self).__init__()
+        self.componenttypes = [PlayerData]
+        self.players = players
+
+    def process(self, world, componentsets):
+        alive = 0
+        for [playerdata] in componentsets:
+            if playerdata.alive:
+                alive += 1
+            if alive > 1:
+                return
+        for player in self.players:
+            player.reset()
 
 
 class MovementSystem(sdl2.ext.Applicator):
@@ -66,18 +81,25 @@ class MovementSystem(sdl2.ext.Applicator):
 
 
 class Player(sdl2.ext.Entity):
-    def __init__(self, world, sprite, controls_left, controls_right, posx=0, posy=0):
+    def __init__(self, world, sprite, controls_left, controls_right, posx, posy, direction):
         self.sprite = sprite
         self.sprite.position = posx, posy
-        self.playerdata = PlayerData()
+        self.playerdata = PlayerData(direction, posx, posy)
         self.controls = Controls(controls_left, controls_right)
+
+    def reset(self):
+        self.sprite.position = self.playerdata.position
+        self.playerdata.direction = self.playerdata.direction
+        self.playerdata.alive = True
 
 
 class PlayerData(object):
-    def __init__(self):
+    def __init__(self, direction, posx, posy):
         super(PlayerData, self).__init__()
-        self.direction = Direction.down
+        self.direction = direction
         self.alive = True
+        self.direction = direction
+        self.position = posx, posy
 
 class SpriteFactory():
     def __init__(self, gridsize):
@@ -143,7 +165,7 @@ def handle_events(players):
 
 def run():
     BG = sdl2.ext.Color(0, 0, 0)
-    GRID_SIZE = 7
+    GRID_SIZE = 8
     ROWS = 120
     COLUMNS = 120
     BOARD_SIZE = GRID_SIZE*COLUMNS, GRID_SIZE*ROWS
@@ -154,17 +176,21 @@ def run():
     window.show()
 
     world = sdl2.ext.World()
-    movement = MovementSystem(GRID_SIZE, ROWS, COLUMNS)
+    factory = SpriteFactory(GRID_SIZE)
+    players = [
+        Player(world, factory.sprite(), b'left', b'right', 4*GRID_SIZE, 4*GRID_SIZE, Direction.right),
+        Player(world, factory.sprite(), b'a', b'd', (COLUMNS-5)*GRID_SIZE, 4*GRID_SIZE, Direction.down),
+        Player(world, factory.sprite(), b'f', b'h', 4*GRID_SIZE, (ROWS-5)*GRID_SIZE, Direction.up),
+        Player(world, factory.sprite(), b'j', b'l', (COLUMNS-5)*GRID_SIZE, (ROWS-5)*GRID_SIZE, Direction.left)
+    ]
+
     spriterenderer = SoftwareRenderer(window, BG)
+    movement = MovementSystem(GRID_SIZE, ROWS, COLUMNS)
+    state = StateSystem(players)
 
     world.add_system(spriterenderer)
     world.add_system(movement)
-
-    factory = SpriteFactory(GRID_SIZE)
-    players = [
-        Player(world, factory.sprite(), b'left', b'right', 0, 0),
-        Player(world, factory.sprite(), b'a', b'd', (COLUMNS-1)*GRID_SIZE, 0)
-    ]
+    world.add_system(state)
 
     running = True
     while running:
